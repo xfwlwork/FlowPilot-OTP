@@ -454,7 +454,9 @@
     "flows/openai/background/publisher-chatgpt2api": {
       "sourceId": "openai-chatgpt2api",
       "commands": [
-        "openai-upload-session-to-chatgpt2api"
+        "openai-upload-session-to-chatgpt2api",
+        "chatgpt2api-capture-oauth-callback",
+        "chatgpt2api-finish-oauth-import"
       ]
     }
   },

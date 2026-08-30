@@ -9,7 +9,7 @@
       ? utils.normalizeOpenAIAccountListEntries(entries)
       : (typeof utils?.normalizeOpenAIAccounts === 'function' ? utils.normalizeOpenAIAccounts(entries) : []);
     const listed = (entries) => typeof utils?.projectOpenAIAccountsForList === 'function'
-      ? utils.projectOpenAIAccountsForList(entries) : normalize(entries).map(({ id, email, enabled, used, note, lastUsedAt }) => ({ id, email, enabled, used, note, lastUsedAt }));
+      ? utils.projectOpenAIAccountsForList(entries) : normalize(entries).map(({ id, email, enabled, used, note, lastUsedAt, hasOtpSecret }) => ({ id, email, enabled, used, note, lastUsedAt, hasOtpSecret }));
 
     function setBusy(value) {
       loading = Boolean(value);
@@ -25,9 +25,11 @@
       dom.list.innerHTML = '';
       const enabled = rows.filter((row) => row.enabled).length;
       const used = rows.filter((row) => row.used).length;
+      const availableOtp = rows.filter((row) => row.enabled && !row.used && row.hasOtpSecret).length;
+      const requiresOtp = Boolean(actions.requiresOtp?.());
       dom.summary.textContent = rows.length
-        ? `已加载 ${rows.length} 个账号，其中 ${enabled} 个启用，${used} 个已用。`
-        : '支持格式：邮箱----密码----备注；密码仅用于后台，不会显示在列表或提示中。';
+        ? `已加载 ${rows.length} 个账号，其中 ${enabled} 个启用，${used} 个已用${requiresOtp ? `，${availableOtp} 个可用 OTP 账号` : ''}。`
+        : '支持格式：邮箱----密码----OTP Secret----备注；密码和 OTP Secret 仅用于后台，不会显示在列表或提示中。';
       if (!rows.length) {
         dom.list.innerHTML = '<div class="luckmail-empty">还没有导入账号。</div>';
         return;
@@ -36,7 +38,7 @@
         const item = document.createElement('div');
         item.className = 'luckmail-item';
         const id = String(row.id);
-        item.innerHTML = `<label class="luckmail-item-main"><input type="checkbox" data-action="select" ${selected.has(id) ? 'checked' : ''}><span class="luckmail-item-email">${helpers.escapeHtml(row.email)}</span><span class="luckmail-item-meta"><span class="luckmail-tag ${row.used ? 'used' : 'active'}">${row.used ? '已用' : '未用'}</span><span class="luckmail-tag ${row.enabled ? 'active' : 'disabled'}">${row.enabled ? '启用' : '停用'}</span>${row.note ? `<span class="luckmail-tag">${helpers.escapeHtml(row.note)}</span>` : ''}</span></label><div class="luckmail-item-actions"><button class="btn btn-outline btn-xs" data-action="toggle-used" type="button">${row.used ? '标记未用' : '标记已用'}</button><button class="btn btn-outline btn-xs" data-action="toggle-enabled" type="button">${row.enabled ? '停用' : '启用'}</button><button class="btn btn-outline btn-xs" data-action="delete" type="button">删除</button></div>`;
+        item.innerHTML = `<label class="luckmail-item-main"><input type="checkbox" data-action="select" ${selected.has(id) ? 'checked' : ''}><span class="luckmail-item-email">${helpers.escapeHtml(row.email)}</span><span class="luckmail-item-meta"><span class="luckmail-tag ${row.used ? 'used' : 'active'}">${row.used ? '已用' : '未用'}</span><span class="luckmail-tag ${row.enabled ? 'active' : 'disabled'}">${row.enabled ? '启用' : '停用'}</span>${row.hasOtpSecret ? '<span class="luckmail-tag active">OTP</span>' : ''}${row.note ? `<span class="luckmail-tag">${helpers.escapeHtml(row.note)}</span>` : ''}</span></label><div class="luckmail-item-actions"><button class="btn btn-outline btn-xs" data-action="toggle-used" type="button">${row.used ? '标记未用' : '标记已用'}</button><button class="btn btn-outline btn-xs" data-action="toggle-enabled" type="button">${row.enabled ? '停用' : '启用'}</button><button class="btn btn-outline btn-xs" data-action="delete" type="button">删除</button></div>`;
         item.querySelector('[data-action="select"]').addEventListener('change', (event) => event.target.checked ? selected.add(id) : selected.delete(id));
         item.querySelector('[data-action="toggle-used"]').addEventListener('click', () => patch((all) => all.map((entry) => String(entry.id) === id ? { ...entry, used: !row.used, lastUsedAt: !row.used ? Date.now() : entry.lastUsedAt } : entry)));
         item.querySelector('[data-action="toggle-enabled"]').addEventListener('click', () => patch((all) => all.map((entry) => String(entry.id) === id ? { ...entry, enabled: !row.enabled } : entry)));
@@ -77,7 +79,10 @@
       dom.markUnusedButton?.addEventListener('click', () => patch((all) => all.map((entry) => selected.has(String(entry.id)) ? { ...entry, used: false } : entry)));
       dom.enableButton?.addEventListener('click', () => patch((all) => all.map((entry) => selected.has(String(entry.id)) ? { ...entry, enabled: true } : entry)));
       dom.disableButton?.addEventListener('click', () => patch((all) => all.map((entry) => selected.has(String(entry.id)) ? { ...entry, enabled: false } : entry)));
-      dom.source?.addEventListener('change', () => actions.persist?.());
+      dom.source?.addEventListener('change', () => {
+        actions.onSourceChange?.();
+        actions.persist?.();
+      });
     }
     return { bindEvents, render, refresh: render };
   }

@@ -773,7 +773,14 @@
       const otpSecret = typeof getImportedAccountOtpSecret === 'function'
         ? await getImportedAccountOtpSecret(state)
         : '';
-      if (!otpSecret) return false;
+      if (!otpSecret) {
+        const requiresOtp = String(state?.targetId || '').trim().toLowerCase() === 'chatgpt2api'
+          && String(state?.openaiAccountSource || '').trim().toLowerCase() === 'imported-pool';
+        if (requiresOtp) {
+          throw new Error(`步骤 ${visibleStep}：ChatGPT2API 导入账号必须配置有效 OTP Secret。`);
+        }
+        return false;
+      }
       const accountPoolUtils = self.MultiPageOpenAIAccountPoolUtils || self.OpenAIAccountPoolUtils;
       if (typeof accountPoolUtils?.generateTotpCode !== 'function') {
         throw new Error(`步骤 ${visibleStep}：OTP 验证码生成能力未接入。`);
@@ -792,6 +799,7 @@
         await completeNodeFromBackground(state?.nodeId || 'fetch-login-code', {
           otpVerification: true,
           phoneVerificationRequired: Boolean(submitResult?.addPhonePage),
+          ...(submitResult?.callbackCaptured ? { callbackCaptured: true } : {}),
         });
       }
       return true;

@@ -1682,6 +1682,63 @@ test('verification flow does not replay step 8 code submit after transient auth-
   assert.deepStrictEqual(resilientMessages, ['GET_LOGIN_AUTH_STATE']);
 });
 
+test('verification flow treats ChatGPT2API platform callback as step 8 success after BFCache closes the message port', async () => {
+  const callbackUrl = 'https://platform.openai.com/auth/callback?code=ac_callback_value&scope=openid+profile+email+offline_access&state=session.state';
+  const stateUpdates = [];
+  const logs = [];
+  const helpers = api.createVerificationFlowHelpers({
+    addLog: async (message, level) => logs.push({ message, level }),
+    chrome: {
+      tabs: {
+        update: async () => {},
+        get: async () => ({ id: 1, url: callbackUrl }),
+      },
+    },
+    CLOUDFLARE_TEMP_EMAIL_PROVIDER: 'cloudflare-temp-email',
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypassRequest: async () => ({ confirmed: true }),
+    getHotmailVerificationPollConfig: () => ({}),
+    getHotmailVerificationRequestTimestamp: () => 0,
+    getState: async () => ({ targetId: 'chatgpt2api', openaiAccountSource: 'imported-pool' }),
+    getTabId: async () => 1,
+    HOTMAIL_PROVIDER: 'hotmail-api',
+    isRetryableContentScriptTransportError: (error) => /back\/forward cache|message channel is closed/i.test(String(error?.message || error || '')),
+    isStopError: () => false,
+    LUCKMAIL_PROVIDER: 'luckmail-api',
+    MAIL_2925_VERIFICATION_INTERVAL_MS: 15000,
+    MAIL_2925_VERIFICATION_MAX_ATTEMPTS: 15,
+    pollCloudflareTempEmailVerificationCode: async () => ({}),
+    pollHotmailVerificationCode: async () => ({}),
+    pollLuckmailVerificationCode: async () => ({}),
+    sendToContentScript: async () => {
+      throw new Error('The page keeping the extension port is moved into back/forward cache, so the message channel is closed.');
+    },
+    sendToContentScriptResilient: async () => {
+      throw new Error('callback tab should be inspected directly without content-script replay');
+    },
+    sendToMailContentScriptResilient: async () => ({}),
+    setState: async (patch) => stateUpdates.push(patch),
+    setStepStatus: async () => {},
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    VERIFICATION_POLL_MAX_ROUNDS: 5,
+  });
+
+  const result = await helpers.submitVerificationCode(8, '510725', { completionStep: 8 });
+
+  assert.deepStrictEqual(result, {
+    success: true,
+    assumed: true,
+    transportRecovered: true,
+    addPhonePage: false,
+    callbackCaptured: true,
+    url: callbackUrl,
+  });
+  assert.deepStrictEqual(stateUpdates, [{ openaiChatgpt2ApiOAuthCallbackUrl: callbackUrl }]);
+  assert.equal(logs.some(({ message }) => message.includes('已保存完整回调地址')), true);
+  assert.equal(logs.some(({ message }) => message.includes('ac_callback_value') || message.includes('session.state')), false);
+});
+
 test('verification flow forwards dynamic completion node id when submitting bound-email login code', async () => {
   const directCalls = [];
 

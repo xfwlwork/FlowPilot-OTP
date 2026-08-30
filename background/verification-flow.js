@@ -90,6 +90,58 @@
         || /页面刚完成跳转或刷新，内容脚本还没有重新接回/i.test(message);
     }
 
+    function parsePlatformOAuthCallbackUrl(value = '') {
+      const rawValue = String(value || '').trim();
+      let parsed = null;
+      try {
+        parsed = new URL(rawValue);
+      } catch (_) {
+        return '';
+      }
+      if (
+        parsed.origin.toLowerCase() !== 'https://platform.openai.com'
+        || parsed.username
+        || parsed.password
+        || parsed.pathname !== '/auth/callback'
+        || !String(parsed.searchParams.get('code') || '').trim()
+        || !String(parsed.searchParams.get('state') || '').trim()
+      ) {
+        return '';
+      }
+      return rawValue;
+    }
+
+    async function inspectStep8PlatformOAuthCallback() {
+      if (!chrome?.tabs?.get || typeof getTabId !== 'function') {
+        return null;
+      }
+      const tabId = Number(await getTabId('openai-auth')) || 0;
+      if (!tabId) {
+        return null;
+      }
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      const callbackUrl = parsePlatformOAuthCallbackUrl(tab?.url);
+      if (!callbackUrl) {
+        return null;
+      }
+      const currentState = typeof getState === 'function' ? await getState() : {};
+      const isChatgpt2ApiImportedPool = String(currentState?.targetId || '').trim().toLowerCase() === 'chatgpt2api'
+        && String(currentState?.openaiAccountSource || '').trim().toLowerCase() === 'imported-pool';
+      if (!isChatgpt2ApiImportedPool) {
+        return null;
+      }
+      if (isChatgpt2ApiImportedPool && typeof setState === 'function') {
+        await setState({ openaiChatgpt2ApiOAuthCallbackUrl: callbackUrl });
+      }
+      return {
+        success: true,
+        reason: 'platform_oauth_callback',
+        addPhonePage: false,
+        callbackCaptured: isChatgpt2ApiImportedPool,
+        url: callbackUrl,
+      };
+    }
+
     function getVerificationCodeStateKey(step) {
       return step === 4 ? 'lastSignupCode' : 'lastLoginCode';
     }
@@ -334,6 +386,10 @@
 
       while (Date.now() - startedAt < timeoutMs) {
         throwIfStopped();
+        const callbackResult = await inspectStep8PlatformOAuthCallback();
+        if (callbackResult) {
+          return callbackResult;
+        }
         try {
           const request = {
             type: 'GET_LOGIN_AUTH_STATE',
@@ -367,6 +423,26 @@
             state: authState || 'unknown',
             url: authUrl,
           };
+
+          const callbackUrl = parsePlatformOAuthCallbackUrl(authUrl);
+          if (callbackUrl) {
+            const currentState = typeof getState === 'function' ? await getState() : {};
+            const isChatgpt2ApiImportedPool = String(currentState?.targetId || '').trim().toLowerCase() === 'chatgpt2api'
+              && String(currentState?.openaiAccountSource || '').trim().toLowerCase() === 'imported-pool';
+            if (!isChatgpt2ApiImportedPool) {
+              continue;
+            }
+            if (isChatgpt2ApiImportedPool && typeof setState === 'function') {
+              await setState({ openaiChatgpt2ApiOAuthCallbackUrl: callbackUrl });
+            }
+            return {
+              success: true,
+              reason: 'platform_oauth_callback',
+              addPhonePage: false,
+              callbackCaptured: isChatgpt2ApiImportedPool,
+              url: callbackUrl,
+            };
+          }
 
           if (authState === 'verification_page' && verificationErrorText) {
             return {
@@ -402,6 +478,10 @@
             };
           }
         } catch (_) {
+          const callbackResultAfterError = await inspectStep8PlatformOAuthCallback();
+          if (callbackResultAfterError) {
+            return callbackResultAfterError;
+          }
           // Ignore transient inspect failures and keep polling.
         }
 
@@ -1292,6 +1372,11 @@
                   step: completionStep,
                   stepKey: 'fetch-login-code',
                 });
+              } else if (fallback.callbackCaptured) {
+                await addLog('验证码提交后通信中断，但页面已跳转到 ChatGPT2API OAuth 回调，已保存完整回调地址并按提交成功继续。', 'warn', {
+                  step: completionStep,
+                  stepKey: 'fetch-login-code',
+                });
               } else {
                 await addLog('验证码提交后通信中断，但页面已进入 OAuth 授权页，按提交成功继续。', 'warn', {
                   step: completionStep,
@@ -1303,6 +1388,7 @@
                 assumed: true,
                 transportRecovered: true,
                 addPhonePage: Boolean(fallback.addPhonePage),
+                callbackCaptured: Boolean(fallback.callbackCaptured),
                 url: fallback.url || '',
               };
             }
@@ -1342,6 +1428,11 @@
                   step: completionStep,
                   stepKey: 'fetch-login-code',
                 });
+              } else if (fallback.callbackCaptured) {
+                await addLog('验证码提交后通信中断，但页面已跳转到 ChatGPT2API OAuth 回调，已保存完整回调地址并按提交成功继续。', 'warn', {
+                  step: completionStep,
+                  stepKey: 'fetch-login-code',
+                });
               } else {
                 await addLog('验证码提交后通信中断，但页面已进入 OAuth 授权页，按提交成功继续。', 'warn', {
                   step: completionStep,
@@ -1353,6 +1444,7 @@
                 assumed: true,
                 transportRecovered: true,
                 addPhonePage: Boolean(fallback.addPhonePage),
+                callbackCaptured: Boolean(fallback.callbackCaptured),
                 url: fallback.url || '',
               };
             }

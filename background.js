@@ -799,6 +799,11 @@ function buildResolvedStepDefinitionState(state = {}) {
       || capabilityState?.effectiveAccountDeliveryMode,
     accountDeliveryRouteId: stepDefinitionOptions.accountDeliveryRouteId
       || capabilityState?.effectiveAccountDeliveryRouteId,
+    openaiAccountSource: String(
+      stepDefinitionOptions.openaiAccountSource
+      ?? state?.openaiAccountSource
+      ?? ''
+    ).trim().toLowerCase(),
     plusModeEnabled: false,
     plusPaymentMethod,
     signupMethod: resolvedSignupMethod,
@@ -827,6 +832,9 @@ function getStepDefinitionsForState(state = {}) {
       targetId: resolvedState?.targetId,
       accountDeliveryMode: resolvedState?.accountDeliveryMode,
       accountDeliveryRouteId: resolvedState?.accountDeliveryRouteId,
+      ...(resolvedState?.openaiAccountSource
+        ? { openaiAccountSource: resolvedState.openaiAccountSource }
+        : {}),
       plusModeEnabled: false,
       plusPaymentMethod: normalizePlusPaymentMethod(resolvedState?.plusPaymentMethod),
       signupMethod: getSignupMethodForStepDefinitions(resolvedState),
@@ -1326,6 +1334,10 @@ const DEFAULT_STATE = {
   logs: [], // 侧边栏展示的运行日志。
   ...PERSISTED_SETTING_DEFAULTS, // 合并 chrome.storage.local 中持久化保存的用户配置。
   currentOpenAIAccountId: '',
+  openaiChatgpt2ApiOAuthSessionId: '',
+  openaiChatgpt2ApiOAuthAuthorizeUrl: '',
+  openaiChatgpt2ApiOAuthExpiresAt: 0,
+  openaiChatgpt2ApiOAuthCallbackUrl: '',
   luckmailApiKey: '',
   luckmailBaseUrl: DEFAULT_LUCKMAIL_BASE_URL,
   luckmailEmailType: DEFAULT_LUCKMAIL_EMAIL_TYPE,
@@ -1739,6 +1751,7 @@ function validateAutoRunStartState(state = {}, options = {}) {
     activeFlowId: options?.activeFlowId ?? state?.activeFlowId,
     targetId: options?.targetId ?? state?.targetId,
     signupMethod: options?.signupMethod ?? state?.signupMethod,
+    totalRuns: options?.totalRuns ?? state?.autoRunTotalRuns,
     state,
   });
 }
@@ -2441,16 +2454,22 @@ function getOpenAIAccountPoolEntries(state = {}) {
   return normalizeOpenAIAccountPoolEntries(state?.openaiAccountPoolEntries);
 }
 
-function getEligibleOpenAIAccountPoolEntries(state = {}) {
+function getEligibleOpenAIAccountPoolEntries(state = {}, options = {}) {
   const accountPoolUtils = self.MultiPageOpenAIAccountPoolUtils || self.OpenAIAccountPoolUtils;
   const entries = getOpenAIAccountPoolEntries(state);
-  return typeof accountPoolUtils?.getEligibleOpenAIAccounts === 'function'
-    ? accountPoolUtils.getEligibleOpenAIAccounts(entries)
+  const requireOtpSecret = Boolean(options?.requireOtpSecret);
+  const selector = requireOtpSecret
+    ? accountPoolUtils?.getEligibleOpenAIOtpAccounts
+    : accountPoolUtils?.getEligibleOpenAIAccounts;
+  return typeof selector === 'function'
+    ? selector(entries)
     : entries.filter((entry) => entry.enabled && !entry.used);
 }
 
 function pickOpenAIAccountForRun(state = {}, options = {}) {
   const accountId = String(options?.accountId || '').trim();
+  const requireOtpSecret = Boolean(options?.requireOtpSecret);
+  const accountPoolUtils = self.MultiPageOpenAIAccountPoolUtils || self.OpenAIAccountPoolUtils;
   const entries = getOpenAIAccountPoolEntries(state);
   if (accountId) {
     const account = entries.find((entry) => entry.id === accountId);
@@ -2460,14 +2479,19 @@ function pickOpenAIAccountForRun(state = {}, options = {}) {
     if (!account.enabled || account.used) {
       throw new Error(`OpenAI 账号池 accountId 不可用：${accountId}`);
     }
+    if (requireOtpSecret && !accountPoolUtils?.isValidOtpSecret?.(account.otpSecret)) {
+      throw new Error(`OpenAI 账号池 accountId 未配置有效 OTP：${accountId}`);
+    }
     return account;
   }
 
-  const eligible = getEligibleOpenAIAccountPoolEntries(state)
+  const eligible = getEligibleOpenAIAccountPoolEntries(state, { requireOtpSecret })
     .slice()
     .sort((left, right) => left.lastUsedAt - right.lastUsedAt || left.email.localeCompare(right.email));
   if (!eligible.length) {
-    throw new Error('OpenAI 账号池没有可用账号。');
+    throw new Error(requireOtpSecret
+      ? 'OpenAI 账号池没有可用的 OTP 账号。'
+      : 'OpenAI 账号池没有可用账号。');
   }
   const run = Math.max(1, Math.floor(Number(options?.run || options?.targetRun) || 1));
   if (run > eligible.length) {
@@ -11114,6 +11138,8 @@ const AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS = new Set([
   'sub2api-agent-identity-import',
   'cpa-session-import',
   'openai-upload-session-to-webchat',
+  'chatgpt2api-capture-oauth-callback',
+  'chatgpt2api-finish-oauth-import',
   'oauth-login',
   'fetch-login-code',
   'post-login-phone-verification',
@@ -11694,6 +11720,8 @@ const AUTH_CHAIN_NODE_IDS = new Set([
   'post-bound-email-phone-verification',
   'confirm-oauth',
   'platform-verify',
+  'chatgpt2api-capture-oauth-callback',
+  'chatgpt2api-finish-oauth-import',
 ]);
 let activeTopLevelAuthChainExecution = null;
 
@@ -11770,6 +11798,12 @@ async function requestStop(options = {}) {
   const runningNodes = getRunningNodeIds(state.nodeStatuses, state);
   const inferredStopNode = inferStoppedRecordNode(state);
   const timerPlan = getPendingAutoRunTimerPlan(state);
+  const chatgpt2ApiOAuthReset = {
+    openaiChatgpt2ApiOAuthSessionId: '',
+    openaiChatgpt2ApiOAuthAuthorizeUrl: '',
+    openaiChatgpt2ApiOAuthExpiresAt: 0,
+    openaiChatgpt2ApiOAuthCallbackUrl: '',
+  };
 
   if (timerPlan && !autoRunActive) {
     autoRunCurrentRun = timerPlan.currentRun;
@@ -11789,6 +11823,7 @@ async function requestStop(options = {}) {
       autoRunSkipFailures: timerPlan.autoRunSkipFailures,
       autoRunRoundSummaries: serializeAutoRunRoundSummaries(timerPlan.totalRuns, timerPlan.roundSummaries),
       autoRunTimerPlan: null,
+      ...chatgpt2ApiOAuthReset,
     });
     await clearAutoRunTimerAlarm();
     if (typeof grokSub2ApiOAuthRunner !== 'undefined') {
@@ -11811,7 +11846,7 @@ async function requestStop(options = {}) {
   }
 
   await addLog(logMessage, 'warn');
-  await setState(clearStep5ProfileStatePatch());
+  await setState({ ...clearStep5ProfileStatePatch(), ...chatgpt2ApiOAuthReset });
   await broadcastStopToContentScripts();
 
   if (!runningNodes.length && inferredStopNode) {
@@ -12328,6 +12363,8 @@ const AUTO_RUN_NODE_DELAYS = Object.freeze({
   'oauth-login': 2000,
   'fetch-login-code': 2000,
   'confirm-oauth': 1000,
+  'chatgpt2api-capture-oauth-callback': 0,
+  'chatgpt2api-finish-oauth-import': 0,
   'platform-verify': 0,
 });
 
@@ -12818,7 +12855,11 @@ async function ensureAutoEmailReady(targetRun, totalRuns, attemptRuns) {
 async function ensureAutoEmailReady(targetRun, totalRuns, attemptRuns) {
   const currentState = await getState();
   if (currentState.openaiAccountSource === 'imported-pool') {
-    const account = pickOpenAIAccountForRun(currentState, { run: targetRun });
+    const resolvedTargetId = String(currentState?.targetId || '').trim().toLowerCase();
+    const account = pickOpenAIAccountForRun(currentState, {
+      run: targetRun,
+      ...(resolvedTargetId === 'chatgpt2api' ? { requireOtpSecret: true } : {}),
+    });
     await setState({
       currentOpenAIAccountId: account.id,
       email: account.email,
@@ -14217,6 +14258,7 @@ const openAiChatgpt2ApiPublisher = self.MultiPageBackgroundOpenAiPublisherChatgp
   getTabId,
   getStepIdByKeyForState,
   isTabAlive,
+  markCurrentOpenAIAccountUsed,
   registerTab,
   sendTabMessageUntilStopped,
   setState,
@@ -14298,6 +14340,8 @@ const stepExecutorsByKey = {
   'cpa-session-import': (state) => cpaSessionImportExecutor.executeCpaSessionImport(state),
   'openai-upload-session-to-webchat': (state) => openAiWebchatPublisher.executeOpenAiUploadSessionToWebchat(state),
   'openai-upload-session-to-chatgpt2api': (state) => openAiChatgpt2ApiPublisher.executeOpenAiUploadSessionToChatgpt2Api(state),
+  'chatgpt2api-capture-oauth-callback': (state) => openAiChatgpt2ApiPublisher.executeChatgpt2ApiCaptureOAuthCallback(state),
+  'chatgpt2api-finish-oauth-import': (state) => openAiChatgpt2ApiPublisher.executeChatgpt2ApiFinishOAuthImport(state),
   'oauth-login': (state) => step7Executor.executeStep7(state),
   'fetch-login-code': (state) => step8Executor.executeStep8(state),
   'post-login-phone-verification': (state) => step8Executor.executePostLoginPhoneVerification(state),
@@ -14795,6 +14839,19 @@ async function executeStep5(state) {
 
 async function refreshOAuthUrlBeforeStep6(state, options = {}) {
   const visibleStep = Number(options.visibleStep) || Number(state?.visibleStep) || 7;
+  if (
+    String(state?.targetId || '').trim().toLowerCase() === 'chatgpt2api'
+    && String(state?.openaiAccountSource || '').trim().toLowerCase() === 'imported-pool'
+  ) {
+    if (!openAiChatgpt2ApiPublisher?.startOpenAiChatgpt2ApiOAuthImport) {
+      throw new Error('ChatGPT2API OAuth 导入能力未接入。');
+    }
+    await addLog('正在向 ChatGPT2API 申请 OAuth 登录地址...', 'info', {
+      step: visibleStep,
+      stepKey: 'oauth-login',
+    });
+    return openAiChatgpt2ApiPublisher.startOpenAiChatgpt2ApiOAuthImport(state);
+  }
   if (state?.accountContributionExpected && !state?.accountContributionEnabled) {
     throw new Error(`步骤 ${visibleStep}：当前自动流程预期使用账号贡献，但运行态 accountContributionEnabled 已丢失，已阻止回退到普通 CPA / SUB2API / Codex2API 链路。请重新进入账号贡献后再点击自动。`);
   }
@@ -15048,6 +15105,8 @@ async function getPostStep6AutoRestartDecision(step, error) {
       'post-bound-email-phone-verification',
       'confirm-oauth',
       'platform-verify',
+      'chatgpt2api-capture-oauth-callback',
+      'chatgpt2api-finish-oauth-import',
     ].includes(currentNodeKey);
   const confirmOauthStep = findStepIdByKeyForState('confirm-oauth', latestState);
   const boundEmailReloginStep = findStepIdByKeyForState('relogin-bound-email', latestState);

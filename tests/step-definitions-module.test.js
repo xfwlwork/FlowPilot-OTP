@@ -587,6 +587,36 @@ test('OpenAI remote upload is appended only for remote publication targets', () 
   );
   assert.deepStrictEqual(chatgpt2ApiNodes.at(-1)?.next, []);
 
+  const importedChatgpt2ApiSteps = api.getSteps({
+    targetId: 'chatgpt2api',
+    openaiAccountSource: 'imported-pool',
+  });
+  const importedChatgpt2ApiNodes = api.getNodes({
+    targetId: 'chatgpt2api',
+    openaiAccountSource: 'imported-pool',
+  });
+  assert.deepStrictEqual(importedChatgpt2ApiSteps.map((step) => step.key), [
+    'open-chatgpt',
+    'submit-signup-email',
+    'fill-password',
+    'fetch-signup-code',
+    'fill-profile',
+    'wait-registration-success',
+    'oauth-login',
+    'fetch-login-code',
+    'chatgpt2api-capture-oauth-callback',
+    'chatgpt2api-finish-oauth-import',
+  ]);
+  assert.deepStrictEqual(
+    importedChatgpt2ApiNodes.find((node) => node.nodeId === 'wait-registration-success')?.next,
+    ['oauth-login']
+  );
+  assert.deepStrictEqual(
+    importedChatgpt2ApiNodes.find((node) => node.nodeId === 'fetch-login-code')?.next,
+    ['chatgpt2api-capture-oauth-callback']
+  );
+  assert.deepStrictEqual(importedChatgpt2ApiNodes.at(-1)?.next, []);
+
   const cpaSyncSteps = api.getSteps({
     targetId: 'cpa',
     openaiWebchatUploadEnabled: true,

@@ -21,6 +21,7 @@
   const OPENAI_TARGET_CODEX2API = 'codex2api';
   const OPENAI_TARGET_WEBCHAT = 'webchat';
   const OPENAI_TARGET_CHATGPT2API = 'chatgpt2api';
+  const OPENAI_ACCOUNT_SOURCE_IMPORTED_POOL = 'imported-pool';
 
   function freezeDeep(entry) {
     if (!entry || typeof entry !== 'object' || Object.isFrozen(entry)) {
@@ -216,6 +217,27 @@
     })],
   });
 
+  const CHATGPT2API_IMPORTED_ACCOUNT_OAUTH_STAGE = freezeDeep([
+    createStep('oauth-login', '启动 ChatGPT2API OAuth 并登录', {
+      sourceId: 'openai-auth',
+      driverId: 'flows/openai/content/openai-auth',
+    }),
+    createStep('fetch-login-code', '生成并输入 OTP 验证码', {
+      sourceId: 'openai-auth',
+      driverId: 'flows/openai/content/openai-auth',
+      command: 'submit-verification-code',
+      mailRuleId: 'openai-login-code',
+    }),
+    createStep('chatgpt2api-capture-oauth-callback', '捕获 ChatGPT2API OAuth 回调', {
+      sourceId: 'openai-chatgpt2api',
+      driverId: 'flows/openai/background/publisher-chatgpt2api',
+    }),
+    createStep('chatgpt2api-finish-oauth-import', '完成 ChatGPT2API OAuth 导入', {
+      sourceId: 'openai-chatgpt2api',
+      driverId: 'flows/openai/background/publisher-chatgpt2api',
+    }),
+  ]);
+
   const TARGET_DELIVERY_ROUTES = freezeDeep({
     [OPENAI_TARGET_CPA]: {
       defaultMode: ACCOUNT_DELIVERY_MODE_OAUTH,
@@ -314,6 +336,13 @@
 
   function buildAccountDeliveryStage(options = {}) {
     const targetId = normalizeTargetId(options?.targetId);
+    const accountSource = String(options?.openaiAccountSource || '').trim().toLowerCase();
+    if (
+      targetId === OPENAI_TARGET_CHATGPT2API
+      && accountSource === OPENAI_ACCOUNT_SOURCE_IMPORTED_POOL
+    ) {
+      return cloneSteps(CHATGPT2API_IMPORTED_ACCOUNT_OAUTH_STAGE);
+    }
     const routeId = resolveAccountDeliveryRouteId(options);
     const routeSteps = ACCOUNT_DELIVERY_STAGE_BY_ROUTE[routeId];
     if (routeId === 'oauth') {
@@ -370,6 +399,11 @@
       { targetId: OPENAI_TARGET_CODEX2API, accountDeliveryMode: ACCOUNT_DELIVERY_MODE_OAUTH },
       { targetId: OPENAI_TARGET_WEBCHAT, accountDeliveryMode: ACCOUNT_DELIVERY_MODE_SESSION },
       { targetId: OPENAI_TARGET_CHATGPT2API, accountDeliveryMode: ACCOUNT_DELIVERY_MODE_SESSION },
+      {
+        targetId: OPENAI_TARGET_CHATGPT2API,
+        accountDeliveryMode: ACCOUNT_DELIVERY_MODE_SESSION,
+        openaiAccountSource: OPENAI_ACCOUNT_SOURCE_IMPORTED_POOL,
+      },
       { targetId: OPENAI_TARGET_CPA, accountDeliveryMode: ACCOUNT_DELIVERY_MODE_OAUTH, signupMethod: SIGNUP_METHOD_PHONE },
       {
         targetId: OPENAI_TARGET_CPA,

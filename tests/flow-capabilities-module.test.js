@@ -589,6 +589,28 @@ test('flow capability registry validates OpenAI ChatGPT2API target configuration
   assert.equal(configuredState.effectiveAccountDeliveryRouteId, 'chatgpt2api-session');
 });
 
+test('flow capability registry requires enough available OTP accounts for ChatGPT2API imported pool', () => {
+  const api = loadApi();
+  const registry = api.createFlowCapabilityRegistry();
+  const state = {
+    activeFlowId: 'openai',
+    targetId: 'chatgpt2api',
+    openaiAccountSource: 'imported-pool',
+    openaiChatgpt2ApiUrl: 'https://chatgpt2api.example.com',
+    openaiChatgpt2ApiAdminKey: 'admin-key',
+    openaiAccountPoolEntries: [
+      { email: 'ready@example.com', password: 'x', hasOtpSecret: true, enabled: true, used: false },
+      { email: 'no-otp@example.com', password: 'x', hasOtpSecret: false, enabled: true, used: false },
+      { email: 'used@example.com', password: 'x', hasOtpSecret: true, enabled: true, used: true },
+    ],
+  };
+
+  assert.equal(registry.validateAutoRunStart({ state, totalRuns: 1 }).ok, true);
+  const insufficient = registry.validateAutoRunStart({ state, totalRuns: 2 });
+  assert.equal(insufficient.ok, false);
+  assert.equal(insufficient.errors.at(-1).code, 'openai_chatgpt2api_otp_account_pool_insufficient');
+});
+
 test('flow capability registry disables phone settings for OpenAI ChatGPT2API target', () => {
   const api = loadApi();
   const registry = api.createFlowCapabilityRegistry();

@@ -101,6 +101,7 @@
           activeFlowId: options?.activeFlowId ?? validationState?.activeFlowId,
           targetId: options?.targetId ?? validationState?.targetId,
           signupMethod: options?.signupMethod ?? validationState?.signupMethod,
+          totalRuns: options?.totalRuns ?? validationState?.autoRunTotalRuns,
           state: validationState,
         });
       },
@@ -1438,6 +1439,7 @@
           const autoRunStartValidation = validateAutoRunStart(state, {
             activeFlowId: autoRunFlowStateUpdates.activeFlowId ?? state?.activeFlowId,
             targetId: autoRunFlowStateUpdates.targetId ?? state?.targetId,
+            totalRuns: normalizeRunCount(message.payload?.totalRuns || 1),
             state,
           });
           if (autoRunStartValidation?.ok === false) {
@@ -1627,6 +1629,10 @@
               sub2apiProxyId: null,
               codex2apiSessionId: null,
               codex2apiOAuthState: null,
+              openaiChatgpt2ApiOAuthSessionId: '',
+              openaiChatgpt2ApiOAuthAuthorizeUrl: '',
+              openaiChatgpt2ApiOAuthExpiresAt: 0,
+              openaiChatgpt2ApiOAuthCallbackUrl: '',
             });
           }
           if (shouldRebuildNodeStatuses && nextNodeIds.length > 0) {

@@ -146,8 +146,8 @@ invalid----secret
 `);
 
   assert.deepStrictEqual(result.accounts.map(utils.projectOpenAIAccountForList), [
-    { id: 'existing', email: 'existing@example.com', enabled: true, used: false, note: '', lastUsedAt: 0 },
-    { id: result.added[0].id, email: 'new@example.com', enabled: true, used: false, note: 'imported', lastUsedAt: 0 },
+    { id: 'existing', email: 'existing@example.com', enabled: true, used: false, note: '', lastUsedAt: 0, hasOtpSecret: false },
+    { id: result.added[0].id, email: 'new@example.com', enabled: true, used: false, note: 'imported', lastUsedAt: 0, hasOtpSecret: false },
   ]);
   assert.deepStrictEqual(result.duplicate, [{ email: 'existing@example.com', note: '' }]);
   assert.deepStrictEqual(result.rejected, [{ lineNumber: 3, reason: 'invalid_email' }]);
@@ -168,13 +168,24 @@ test('eligible selection excludes disabled and used accounts and chooses least r
   assert.deepStrictEqual(utils.getEligibleOpenAIAccounts([{ id: 'ok', email: 'ok@example.com', password: 'x' }, { id: 'used', email: 'used@example.com', password: 'x', used: true }]).map((account) => account.id), ['ok']);
 });
 
+test('OTP eligible selection excludes missing, invalid, disabled, and used OTP accounts', () => {
+  const eligible = utils.getEligibleOpenAIOtpAccounts([
+    { id: 'ready', email: 'ready@example.com', password: 'x', otpSecret: 'JBSWY3DPEHPK3PXP' },
+    { id: 'missing', email: 'missing@example.com', password: 'x' },
+    { id: 'invalid', email: 'invalid@example.com', password: 'x', otpSecret: 'not-base32' },
+    { id: 'disabled', email: 'disabled@example.com', password: 'x', otpSecret: 'JBSWY3DPEHPK3PXP', enabled: false },
+    { id: 'used', email: 'used@example.com', password: 'x', otpSecret: 'JBSWY3DPEHPK3PXP', used: true },
+  ]);
+  assert.deepStrictEqual(eligible.map((account) => account.id), ['ready']);
+});
+
 test('safe list projections never expose account passwords', () => {
   const projected = utils.projectOpenAIAccountsForList([
     { id: 'safe', email: 'safe@example.com', password: 'do-not-leak', note: 'note' },
   ]);
 
   assert.deepStrictEqual(projected, [{
-    id: 'safe', email: 'safe@example.com', enabled: true, used: false, note: 'note', lastUsedAt: 0,
+    id: 'safe', email: 'safe@example.com', enabled: true, used: false, note: 'note', lastUsedAt: 0, hasOtpSecret: false,
   }]);
   assert.equal(JSON.stringify(projected).includes('do-not-leak'), false);
 });

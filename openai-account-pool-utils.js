@@ -124,7 +124,10 @@
     for (const account of accounts) {
       const normalized = normalizeOpenAIAccount(account);
       if (!isValidEmail(normalized.email) || deduped.has(normalized.email)) continue;
-      deduped.set(normalized.email, normalized);
+      deduped.set(normalized.email, {
+        ...normalized,
+        hasOtpSecret: Boolean(account?.hasOtpSecret || normalized.otpSecret),
+      });
     }
     return [...deduped.values()];
   }
@@ -220,6 +223,10 @@
     return normalizeOpenAIAccounts(accounts).filter(isEligibleOpenAIAccount);
   }
 
+  function getEligibleOpenAIOtpAccounts(accounts) {
+    return getEligibleOpenAIAccounts(accounts).filter((account) => isValidOtpSecret(account.otpSecret));
+  }
+
   function pickEligibleOpenAIAccount(accounts) {
     return getEligibleOpenAIAccounts(accounts)
       .slice()
@@ -238,6 +245,7 @@
       used: normalized.used,
       note: normalized.note,
       lastUsedAt: normalized.lastUsedAt,
+      hasOtpSecret: Boolean(account?.hasOtpSecret || normalized.otpSecret),
     };
   }
 
@@ -247,6 +255,7 @@
 
   return {
     getEligibleOpenAIAccounts,
+    getEligibleOpenAIOtpAccounts,
     generateTotpCode,
     importOpenAIAccounts,
     isEligibleOpenAIAccount,

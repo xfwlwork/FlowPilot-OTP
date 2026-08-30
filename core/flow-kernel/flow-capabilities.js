@@ -322,12 +322,30 @@
         : targetConfig.apiKey);
       const normalizedTargetId = String(targetId || '').trim().toLowerCase();
       const targetIsChatgpt2Api = normalizedTargetId === 'chatgpt2api';
+      const importedPoolEnabled = cleanString(state?.openaiAccountSource).toLowerCase() === 'imported-pool';
+      const accountPoolEntries = Array.isArray(state?.openaiAccountPoolEntries)
+        ? state.openaiAccountPoolEntries
+        : [];
+      const eligibleOtpAccountCount = accountPoolEntries.filter((entry) => {
+        if (!entry || typeof entry !== 'object') return false;
+        const email = cleanString(entry.email);
+        const hasPassword = hasOwn(entry, 'password') ? Boolean(cleanString(entry.password)) : true;
+        const normalizedOtpSecret = cleanString(entry.otpSecret).toUpperCase().replace(/[\s-]/g, '');
+        const hasOtpSecret = Boolean(entry.hasOtpSecret || /^[A-Z2-7]{16,}$/.test(normalizedOtpSecret));
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+          && hasPassword
+          && hasOtpSecret
+          && entry.enabled !== false
+          && entry.used !== true;
+      }).length;
       const missingFields = [];
       if (!baseUrl) missingFields.push('baseUrl');
       if (!apiKey) missingFields.push('apiKey');
       return {
         configComplete: missingFields.length === 0,
         missingFields,
+        importedPoolEnabled,
+        eligibleOtpAccountCount,
         targetIsChatgpt2Api,
         uploadRequired: targetIsChatgpt2Api,
       };
@@ -650,6 +668,7 @@
           accountDeliveryMode: effectiveAccountDeliveryMode,
           accountDeliveryRouteId: effectiveAccountDeliveryRouteId,
           targetId: effectiveTargetId,
+          openaiAccountSource: cleanString(state?.openaiAccountSource).toLowerCase(),
           plusModeEnabled: runtimeLocks.plusModeEnabled,
           phoneVerificationEnabled: runtimeLocks.phoneVerificationEnabled,
           openaiChatgpt2ApiUploadEnabled: openaiChatgpt2Api.uploadRequired,
@@ -756,6 +775,26 @@
         && !capabilityState.openaiChatgpt2Api?.configComplete
       ) {
         errors.push(buildOpenAiChatgpt2ApiValidationError(capabilityState));
+      }
+      if (
+        capabilityState.activeFlowId === 'openai'
+        && capabilityState.openaiChatgpt2Api?.targetIsChatgpt2Api
+        && capabilityState.openaiChatgpt2Api?.importedPoolEnabled
+      ) {
+        const requestedRuns = Math.max(1, Math.floor(Number(
+          options?.totalRuns ?? state?.autoRunTotalRuns ?? 1
+        ) || 1));
+        const eligibleCount = Math.max(0, Number(
+          capabilityState.openaiChatgpt2Api?.eligibleOtpAccountCount
+        ) || 0);
+        if (eligibleCount < requestedRuns) {
+          errors.push({
+            code: 'openai_chatgpt2api_otp_account_pool_insufficient',
+            message: eligibleCount > 0
+              ? `ChatGPT2API 导入账号池仅有 ${eligibleCount} 个可用 OTP 账号，不足以执行 ${requestedRuns} 轮。`
+              : 'ChatGPT2API 导入账号池没有可用 OTP 账号，请先导入同时包含邮箱、密码和有效 OTP Secret 的账号。',
+          });
+        }
       }
       if (
         capabilityState.activeFlowId === 'grok'

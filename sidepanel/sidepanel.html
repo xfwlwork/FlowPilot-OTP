@@ -634,7 +634,7 @@
               <option value="imported-pool">使用导入账号池</option>
             </select>
           </div>
-          <p class="icloud-summary">仅 cpa、sub2api、codex2api 可使用。格式：邮箱----密码----OTP Secret----备注（后两项可省略）；填写 OTP Secret 后，登录验证码步骤会自动生成并提交 6 位验证码。</p>
+          <p class="icloud-summary">cpa、sub2api、codex2api、ChatGPT2API 可使用。格式：邮箱----密码----OTP Secret----备注（后两项可省略）；ChatGPT2API OAuth 导入仅选择已配置 OTP Secret 的账号。</p>
           <textarea id="input-openai-account-pool-import" class="data-textarea mono" rows="4" placeholder="邮箱----密码----OTP Secret----备注&#10;account@example.com----your-password----JBSWY3DPEHPK3PXP----可选备注"></textarea>
           <div class="data-inline"><button id="btn-openai-account-pool-import" class="btn btn-primary btn-sm" type="button">导入账号</button></div>
           <div id="openai-account-pool-summary" class="icloud-summary"></div>

@@ -647,6 +647,7 @@ let currentPhoneVerificationEnabled = false;
 let currentPhoneSignupReloginAfterBindEmailEnabled = DEFAULT_PHONE_SIGNUP_RELOGIN_AFTER_BIND_EMAIL_ENABLED;
 let currentStepDefinitionFlowId = DEFAULT_ACTIVE_FLOW_ID;
 let currentStepDefinitionTargetId = '';
+let currentStepDefinitionOpenAiAccountSource = '';
 let currentStepDefinitionOpenAiWebchatUploadEnabled = false;
 let currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled = false;
 let phoneSignupReuseUiWasLocked = false;
@@ -1182,6 +1183,9 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
   const targetId = typeof options === 'string'
     ? (typeof latestState !== 'undefined' ? latestState?.targetId : '')
     : (options.targetId || (typeof latestState !== 'undefined' ? latestState?.targetId : ''));
+  const openaiAccountSource = typeof options === 'string'
+    ? String(typeof latestState !== 'undefined' ? latestState?.openaiAccountSource || '' : '').trim().toLowerCase()
+    : String(options.openaiAccountSource ?? (typeof latestState !== 'undefined' ? latestState?.openaiAccountSource || '' : '')).trim().toLowerCase();
   const openaiWebchatUploadEnabled = typeof options === 'string'
     ? Boolean(typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
     : Boolean(options.openaiWebchatUploadEnabled ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false));
@@ -1200,6 +1204,7 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
   return (window.MultiPageStepDefinitions?.getSteps?.({
     activeFlowId: String(activeFlowId || '').trim().toLowerCase() || defaultFlowId,
     targetId,
+    ...(openaiAccountSource ? { openaiAccountSource } : {}),
     accountDeliveryMode: normalizeAccountDeliveryMode(rawAccountDeliveryMode, 'oauth'),
     accountDeliveryRouteId: String(rawAccountDeliveryRouteId || '').trim(),
     plusModeEnabled,
@@ -1256,6 +1261,9 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
   const targetId = typeof options === 'string'
     ? (typeof latestState !== 'undefined' ? latestState?.targetId : '')
     : (options.targetId || (typeof latestState !== 'undefined' ? latestState?.targetId : ''));
+  const openaiAccountSource = typeof options === 'string'
+    ? String(typeof latestState !== 'undefined' ? latestState?.openaiAccountSource || '' : '').trim().toLowerCase()
+    : String(options.openaiAccountSource ?? (typeof latestState !== 'undefined' ? latestState?.openaiAccountSource || '' : '')).trim().toLowerCase();
   const openaiWebchatUploadEnabled = typeof options === 'string'
     ? Boolean(typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
     : Boolean(options.openaiWebchatUploadEnabled ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false));
@@ -1274,6 +1282,7 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
   const nodes = window.MultiPageStepDefinitions?.getNodes?.({
     activeFlowId: String(activeFlowId || '').trim().toLowerCase() || defaultFlowId,
     targetId,
+    ...(openaiAccountSource ? { openaiAccountSource } : {}),
     accountDeliveryMode: normalizeAccountDeliveryMode(rawAccountDeliveryMode, 'oauth'),
     accountDeliveryRouteId: String(rawAccountDeliveryRouteId || '').trim(),
     plusModeEnabled,
@@ -1368,6 +1377,11 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
     ?? (typeof latestState !== 'undefined' ? latestState?.accountContributionEnabled : false)
   );
   const targetId = options.targetId || (typeof latestState !== 'undefined' ? latestState?.targetId : '');
+  const openaiAccountSource = String(
+    options.openaiAccountSource
+    ?? (typeof latestState !== 'undefined' ? latestState?.openaiAccountSource : '')
+    ?? ''
+  ).trim().toLowerCase();
   const openaiWebchatUploadEnabled = Boolean(
     options.openaiWebchatUploadEnabled
     ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
@@ -1397,6 +1411,9 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
   if (typeof currentStepDefinitionTargetId !== 'undefined') {
     currentStepDefinitionTargetId = String(targetId || '').trim().toLowerCase();
   }
+  if (typeof currentStepDefinitionOpenAiAccountSource !== 'undefined') {
+    currentStepDefinitionOpenAiAccountSource = openaiAccountSource;
+  }
   if (typeof currentStepDefinitionOpenAiWebchatUploadEnabled !== 'undefined') {
     currentStepDefinitionOpenAiWebchatUploadEnabled = Boolean(openaiWebchatUploadEnabled);
   }
@@ -1406,6 +1423,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
   stepDefinitions = getStepDefinitionsForMode(currentPlusModeEnabled, {
     activeFlowId: nextActiveFlowId,
     targetId,
+    ...(openaiAccountSource ? { openaiAccountSource } : {}),
     accountDeliveryMode: currentAccountDeliveryMode,
     accountDeliveryRouteId: currentAccountDeliveryRouteId,
     plusPaymentMethod: currentPlusPaymentMethod,
@@ -1421,6 +1439,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
     ? getWorkflowNodesForMode(currentPlusModeEnabled, {
       activeFlowId: nextActiveFlowId,
       targetId,
+      ...(openaiAccountSource ? { openaiAccountSource } : {}),
       accountDeliveryMode: currentAccountDeliveryMode,
       accountDeliveryRouteId: currentAccountDeliveryRouteId,
       plusPaymentMethod: currentPlusPaymentMethod,
@@ -10690,6 +10709,11 @@ function resolveStepDefinitionCapabilityState(state = latestState, options = {})
         nextState?.grokSub2apiGrok2ApiUploadEnabled
         ?? nextState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
       ),
+    openaiAccountSource: String(
+      capabilityState?.stepDefinitionOptions?.openaiAccountSource
+      ?? nextState?.openaiAccountSource
+      ?? ''
+    ).trim().toLowerCase(),
   };
 }
 
@@ -11783,6 +11807,11 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
       ?? (typeof latestState !== 'undefined' ? latestState?.accountContributionEnabled : false)
   );
   const nextTargetId = options.targetId || (typeof latestState !== 'undefined' ? latestState?.targetId : '');
+  const nextOpenaiAccountSource = String(
+    options.openaiAccountSource
+    ?? (typeof latestState !== 'undefined' ? latestState?.openaiAccountSource : '')
+    ?? ''
+  ).trim().toLowerCase();
   const nextOpenaiWebchatUploadEnabled = Boolean(
     options.openaiWebchatUploadEnabled
       ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
@@ -11808,6 +11837,9 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
   const currentTargetId = typeof currentStepDefinitionTargetId !== 'undefined'
     ? String(currentStepDefinitionTargetId || '').trim().toLowerCase()
     : '';
+  const currentOpenaiAccountSource = typeof currentStepDefinitionOpenAiAccountSource !== 'undefined'
+    ? String(currentStepDefinitionOpenAiAccountSource || '').trim().toLowerCase()
+    : '';
   const currentOpenaiWebchatUploadEnabled = typeof currentStepDefinitionOpenAiWebchatUploadEnabled !== 'undefined'
     ? Boolean(currentStepDefinitionOpenAiWebchatUploadEnabled)
     : Boolean(typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false);
@@ -11819,6 +11851,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
   const nextPaymentTitle = rootScope.MultiPageStepDefinitions?.getPlusPaymentStepTitle?.({
     activeFlowId: nextActiveFlowId,
     targetId: nextTargetId,
+    openaiAccountSource: nextOpenaiAccountSource,
     accountDeliveryMode: nextAccountDeliveryMode,
     accountDeliveryRouteId: nextAccountDeliveryRouteId,
     plusModeEnabled: nextPlusModeEnabled,
@@ -11844,6 +11877,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     || nextGrokSub2apiGrok2ApiUploadEnabled !== currentGrokSub2apiGrok2ApiUploadEnabled
     || nextActiveFlowId !== currentFlowId
     || normalizedNextTargetId !== currentTargetId
+    || nextOpenaiAccountSource !== currentOpenaiAccountSource
     || paymentTitleChanged;
   if (!shouldRender) {
     return;
@@ -11852,6 +11886,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
   rebuildStepDefinitionState(nextPlusModeEnabled, {
     activeFlowId: nextActiveFlowId,
     targetId: nextTargetId,
+    openaiAccountSource: nextOpenaiAccountSource,
     accountDeliveryMode: nextAccountDeliveryMode,
     accountDeliveryRouteId: nextAccountDeliveryRouteId,
     plusPaymentMethod: nextPaymentMethod,
@@ -11885,6 +11920,7 @@ function syncStepDefinitionsFromUiState(stateOverrides = {}) {
   syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
     activeFlowId: nextState?.activeFlowId || nextState?.flowId || DEFAULT_ACTIVE_FLOW_ID,
     targetId: nextState?.targetId,
+    openaiAccountSource: stepDefinitionState.openaiAccountSource || nextState?.openaiAccountSource,
     accountDeliveryMode: stepDefinitionState.accountDeliveryMode,
     accountDeliveryRouteId: stepDefinitionState.accountDeliveryRouteId,
     plusPaymentMethod: getSelectedPlusPaymentMethod(nextState),
@@ -11916,6 +11952,7 @@ function applySettingsState(state) {
     syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
       activeFlowId: state?.activeFlowId || state?.flowId,
       targetId: state?.targetId,
+      openaiAccountSource: stepDefinitionState.openaiAccountSource || state?.openaiAccountSource,
       accountDeliveryMode: stepDefinitionState.accountDeliveryMode,
       accountDeliveryRouteId: stepDefinitionState.accountDeliveryRouteId,
       plusPaymentMethod: state?.plusPaymentMethod,
@@ -14634,7 +14671,7 @@ function updatePanelModeUI() {
 
   if (typeof rowOpenAIAccountPool !== 'undefined' && rowOpenAIAccountPool) {
     const eligible = activeFlowId === DEFAULT_ACTIVE_FLOW_ID
-      && ['cpa', 'sub2api', 'codex2api'].includes(String(displayTargetId || '').trim().toLowerCase());
+      && ['cpa', 'sub2api', 'codex2api', 'chatgpt2api'].includes(String(displayTargetId || '').trim().toLowerCase());
     rowOpenAIAccountPool.style.display = eligible ? '' : 'none';
     if (
       !eligible
@@ -15591,6 +15628,13 @@ const openAIAccountPoolManager = window.SidepanelOpenAIAccountPoolManager?.creat
   },
   helpers: { escapeHtml, showToast },
   actions: {
+    requiresOtp: () => getSelectedPanelMode(latestState) === 'chatgpt2api'
+      && selectOpenAIAccountSource?.value === 'imported-pool',
+    onSourceChange: () => {
+      const openaiAccountSource = selectOpenAIAccountSource?.value === 'imported-pool' ? 'imported-pool' : '';
+      latestState = { ...(latestState || {}), openaiAccountSource };
+      syncStepDefinitionsFromUiState({ openaiAccountSource });
+    },
     persist: async () => { markSettingsDirty(true); await saveSettings({ silent: true }); },
     importEntries: async (text) => {
       const result = OpenAIAccountPoolUtils.importOpenAIAccounts(openAIAccountPoolEntriesState, text);
@@ -16230,11 +16274,13 @@ async function startAutoRunFromCurrentSettings() {
         ? Boolean(inputPlusModeEnabled.checked)
         : Boolean(latestState?.plusModeEnabled),
       accountContributionEnabled: Boolean(latestState?.accountContributionEnabled),
+      autoRunTotalRuns: requestedTotalRuns,
     };
     return registry.validateAutoRunStart({
       activeFlowId: validationState.activeFlowId,
       targetId: validationState.targetId,
       signupMethod: validationState.signupMethod,
+      totalRuns: requestedTotalRuns,
       state: validationState,
     });
   })();

@@ -20,17 +20,23 @@ test('public state projection removes imported account passwords without mutatin
       { id: 'b', email: 'b@example.com', password: 'another-secret' },
     ],
     nested: { openaiAccountPoolEntries: [{ password: 'nested-secret', id: 'n' }] },
+    openaiChatgpt2ApiOAuthSessionId: 'oauth-session-secret',
+    openaiChatgpt2ApiOAuthAuthorizeUrl: 'https://auth.openai.com/authorize?state=secret',
+    openaiChatgpt2ApiOAuthExpiresAt: 123,
+    openaiChatgpt2ApiOAuthCallbackUrl: 'https://platform.openai.com/auth/callback?code=secret&state=secret',
   };
   const publicState = utils.projectPublicState(state);
   assert.equal(JSON.stringify(publicState.openaiAccountPoolEntries), JSON.stringify([
-    { id: 'a', email: 'a@example.com', used: false },
-    { id: 'b', email: 'b@example.com' },
+    { hasOtpSecret: false, id: 'a', email: 'a@example.com', used: false },
+    { hasOtpSecret: false, id: 'b', email: 'b@example.com' },
   ]));
   assert.equal(publicState.password, 'flow-secret');
   assert.equal(Object.hasOwn(publicState.nested.openaiAccountPoolEntries[0], 'password'), false);
   assert.equal(state.password, 'flow-secret');
   assert.equal(state.nested.openaiAccountPoolEntries[0].password, 'nested-secret');
   assert.equal(state.openaiAccountPoolEntries[0].password, 'account-secret');
+  assert.equal(Object.hasOwn(publicState, 'openaiChatgpt2ApiOAuthSessionId'), false);
+  assert.equal(Object.hasOwn(publicState, 'openaiChatgpt2ApiOAuthCallbackUrl'), false);
 });
 
 test('message log metadata contains only safe message metadata', () => {

@@ -265,6 +265,8 @@
     async function executeStep7(state) {
       let initialState = state || {};
       const usesImportedAccountPool = String(initialState?.openaiAccountSource || '').trim().toLowerCase() === 'imported-pool';
+      const requiresImportedOtp = usesImportedAccountPool
+        && String(initialState?.targetId || '').trim().toLowerCase() === 'chatgpt2api';
       let selectedImportedAccountId = String(initialState?.currentOpenAIAccountId || '').trim();
       // Imported account credentials are runtime-only: resolve them before identity
       // validation, but never persist or log the password.
@@ -277,7 +279,10 @@
           if (typeof pickOpenAIAccountForRun !== 'function') {
             throw new Error('OpenAI 账号池未选择账号，无法执行 OAuth 登录。');
           }
-          const selectedAccount = pickOpenAIAccountForRun(initialState, { run: 1 });
+          const selectedAccount = pickOpenAIAccountForRun(initialState, {
+            run: 1,
+            ...(requiresImportedOtp ? { requireOtpSecret: true } : {}),
+          });
           selectedImportedAccountId = String(selectedAccount?.id || '').trim();
           if (!selectedImportedAccountId) {
             throw new Error('OpenAI 账号池没有可用账号，无法执行 OAuth 登录。');
@@ -296,6 +301,9 @@
         const importedPassword = String(importedCredentials?.password || '');
         if (!importedEmail || !importedPassword) {
           throw new Error(`OpenAI 账号池 accountId 不可用：${selectedImportedAccountId}`);
+        }
+        if (requiresImportedOtp && !String(importedCredentials?.otpSecret || '').trim()) {
+          throw new Error(`OpenAI 账号池 accountId 未配置有效 OTP：${selectedImportedAccountId}`);
         }
         initialState = {
           ...initialState,

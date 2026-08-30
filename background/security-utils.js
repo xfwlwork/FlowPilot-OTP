@@ -8,12 +8,17 @@
     if (!value || typeof value !== 'object') {
       return value;
     }
-    const result = {};
+    const result = insideOpenAIAccountPool
+      ? { hasOtpSecret: Boolean(value.hasOtpSecret || value.otpSecret) }
+      : {};
     for (const [childKey, childValue] of Object.entries(value)) {
       // The sidepanel must receive ordinary settings unchanged, including
       // management keys and Admin Auth. Only imported OpenAI account passwords
       // are intentionally excluded because the account-list UI never needs them.
       if (insideOpenAIAccountPool && /^(?:password|otpsecret)$/i.test(String(childKey))) {
+        continue;
+      }
+      if (/^openaiChatgpt2ApiOAuth(?:SessionId|AuthorizeUrl|ExpiresAt|CallbackUrl)$/i.test(String(childKey))) {
         continue;
       }
       result[childKey] = projectPublicState(
