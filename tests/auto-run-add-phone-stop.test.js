@@ -281,6 +281,81 @@ test('auto-run controller skips add-phone failures to the next round instead of 
   assert.equal(runtime.state.autoRunSessionId, 0);
 });
 
+test('auto-run controller skips a deactivated imported account and starts the next round even when retry is disabled', async () => {
+  const events = { logs: [], runCalls: 0, accountRecords: [], broadcasts: [] };
+  let currentState = {
+    stepStatuses: {},
+    nodeStatuses: {},
+    tabRegistry: {},
+    sourceLastUrls: {},
+    autoRunRoundSummaries: [],
+    autoRunSkipFailures: false,
+    autoRunFallbackThreadIntervalMinutes: 0,
+    autoStepDelaySeconds: null,
+  };
+  const runtime = {
+    state: { autoRunActive: false, autoRunCurrentRun: 0, autoRunTotalRuns: 0, autoRunAttemptRun: 0, autoRunSessionId: 0 },
+    get() { return { ...this.state }; },
+    set(updates = {}) { this.state = { ...this.state, ...updates }; },
+  };
+  const controller = api.createAutoRunController({
+    addLog: async (message, level = 'info') => events.logs.push({ message, level }),
+    appendAccountRunRecord: async (status, _state, reason) => events.accountRecords.push({ status, reason }),
+    AUTO_RUN_MAX_RETRIES_PER_ROUND: 3,
+    AUTO_RUN_RETRY_DELAY_MS: 0,
+    AUTO_RUN_TIMER_KIND_BEFORE_RETRY: 'before_retry',
+    AUTO_RUN_TIMER_KIND_BETWEEN_ROUNDS: 'between_rounds',
+    broadcastAutoRunStatus: async (phase, payload = {}) => events.broadcasts.push({ phase, ...payload }),
+    broadcastStopToContentScripts: async () => {},
+    buildFreshAutoRunKeepState: () => ({}),
+    cancelPendingCommands: () => {},
+    clearStopRequest: () => {},
+    createAutoRunSessionId: () => 1,
+    getAutoRunStatusPayload: () => ({}),
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getFirstUnfinishedStep: () => 1,
+    getPendingAutoRunTimerPlan: () => null,
+    getRunningSteps: () => [],
+    getStopRequested: () => false,
+    getState: async () => ({ ...currentState }),
+    hasSavedProgress: () => false,
+    isAddPhoneAuthFailure: () => false,
+    isAutoRunTimerParkedError: () => false,
+    isDuckDdgDailyLimitFailure: () => false,
+    isImportedAccountInvalidError: (error) => /^IMPORTED_ACCOUNT_INVALID::/.test(error?.message || String(error || '')),
+    isKiroProxyFailure: () => false,
+    isPhoneSmsPlatformRateLimitFailure: () => false,
+    isPlusCheckoutNonFreeTrialFailure: () => false,
+    isRestartCurrentAttemptError: () => false,
+    isSignupUserAlreadyExistsFailure: () => false,
+    isStep4Route405RecoveryLimitFailure: () => false,
+    isStopError: () => false,
+    launchAutoRunTimerPlan: async () => false,
+    markCurrentRegistrationAccountUsed: async () => {},
+    normalizeAutoRunFallbackThreadIntervalMinutes: () => 0,
+    persistAutoRunTimerPlan: async () => ({}),
+    resetState: async () => { currentState = { ...currentState, stepStatuses: {}, nodeStatuses: {} }; },
+    runAutoSequenceFromStep: async () => {
+      events.runCalls += 1;
+      if (events.runCalls === 1) throw new Error('IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。');
+    },
+    runtime,
+    setState: async (updates = {}) => { currentState = { ...currentState, ...updates }; },
+    sleepWithStop: async () => {},
+    throwIfAutoRunSessionStopped: () => {},
+    waitForRunningStepsToFinish: async () => currentState,
+    chrome: { runtime: { sendMessage: () => Promise.resolve() } },
+  });
+
+  await controller.autoRunLoop(2, { autoRunSkipFailures: false, mode: 'restart' });
+
+  assert.equal(events.runCalls, 2);
+  assert.equal(events.accountRecords.length, 1);
+  assert.equal(events.broadcasts.some(({ phase }) => phase === 'retrying'), false);
+  assert.ok(events.logs.some(({ message }) => /已跳过该账号/.test(message)));
+  assert.ok(events.logs.some(({ message }) => /下一个可用导入账号/.test(message)));
+});
+
 test('auto-run controller treats phone-number supply exhaustion as round-fatal and skips same-round retries', async () => {
   const events = {
     logs: [],

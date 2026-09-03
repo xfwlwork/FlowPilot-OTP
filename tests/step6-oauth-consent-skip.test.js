@@ -101,6 +101,44 @@ return {
   assert.equal(transition.result.loginVerificationRequestedAt, null);
 });
 
+test('password submit throws an imported-account invalid error before reporting a stalled transition', async () => {
+  const api = new Function(`
+const location = { href: 'https://auth.openai.com/log-in/password' };
+
+function inspectLoginAuthState() {
+  return {
+    state: 'imported_account_invalid_page',
+    url: location.href,
+  };
+}
+
+function throwIfStopped() {}
+async function sleep() {
+  throw new Error('should not wait once a deactivated account is detected');
+}
+
+${extractFunction('createStep6SuccessResult')}
+${extractFunction('createStep6OAuthConsentSuccessResult')}
+${extractFunction('createStep6RecoverableResult')}
+${extractFunction('normalizeStep6Snapshot')}
+${extractFunction('getStep6OptionMessage')}
+${extractFunction('resolveStep6PostSubmitSnapshot')}
+${extractFunction('waitForStep6PostSubmitTransition')}
+${extractFunction('waitForStep6PasswordSubmitTransition')}
+
+return {
+  run() {
+    return waitForStep6PasswordSubmitTransition(123, 1000);
+  },
+};
+`)();
+
+  await assert.rejects(
+    () => api.run(),
+    /IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用/
+  );
+});
+
 test('step 7 entry succeeds when the auth page is already on OAuth consent', async () => {
   const logs = [];
   const api = new Function(`

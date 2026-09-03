@@ -2519,12 +2519,18 @@ async function markCurrentOpenAIAccountUsed(state = {}, options = {}) {
     return { updated: false };
   }
   const entries = getOpenAIAccountPoolEntries(state);
+  const note = String(options?.note || '').trim();
   let changed = false;
   const now = Date.now();
   const nextEntries = entries.map((entry) => {
-    if (entry.id !== accountId || (entry.used && entry.lastUsedAt)) return entry;
+    if (entry.id !== accountId || (entry.used && entry.lastUsedAt && (!note || entry.note === note))) return entry;
     changed = true;
-    return { ...entry, used: true, lastUsedAt: now };
+    return {
+      ...entry,
+      used: true,
+      lastUsedAt: entry.lastUsedAt || now,
+      ...(note ? { note } : {}),
+    };
   });
   if (!changed) {
     return { updated: false };
@@ -12624,6 +12630,7 @@ const autoRunController = self.MultiPageBackgroundAutoRunController?.createAutoR
   isPlusCheckoutNonFreeTrialFailure,
   isAutoRunTimerParkedError,
   isDuckDdgDailyLimitFailure,
+  isImportedAccountInvalidError,
   isKiroProxyFailure,
   isRestartCurrentAttemptError,
   isStep4Route405RecoveryLimitFailure,
@@ -13929,6 +13936,7 @@ const step7Executor = self.MultiPageBackgroundStep7?.createStep7Executor({
   getLoginAuthStateLabel,
   getOAuthFlowStepTimeoutMs,
   getState,
+  markCurrentOpenAIAccountUsed,
   pickOpenAIAccountForRun,
   resolveImportedAccountCredentials,
   setState,
@@ -15035,6 +15043,10 @@ function isAddPhoneAuthState(authState = {}) {
     || isAddPhoneAuthUrl(authState?.url);
 }
 
+function isImportedAccountInvalidError(error) {
+  return /^IMPORTED_ACCOUNT_INVALID::/i.test(getErrorMessage(error));
+}
+
 async function getPostStep6AutoRestartDecision(step, error) {
   const resolveStepKey = (stepId, state) => {
     if (typeof getStepExecutionKeyForState === 'function') {
@@ -15083,6 +15095,17 @@ async function getPostStep6AutoRestartDecision(step, error) {
   const normalizedStep = Number(step);
   const errorMessage = getErrorMessage(error);
   const shouldForceRestartFromStep7 = /restart step 7 with a new number/i.test(errorMessage);
+  if (isImportedAccountInvalidError(error)) {
+    return {
+      shouldRestart: false,
+      blockedByAddPhone: false,
+      terminal: true,
+      forcedByPhoneVerificationTimeout: false,
+      restartStep: null,
+      errorMessage,
+      authState: null,
+    };
+  }
   const latestState = await getState();
   const explicitAuthChainStartStep = findStepIdByKeyForState('oauth-login', latestState);
   const authChainStartStep = typeof getAuthChainStartStepId === 'function'

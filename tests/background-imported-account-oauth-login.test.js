@@ -182,3 +182,25 @@ test('step 7 does not retry imported-account credential failures or leak the pas
   assert.equal(events.refreshStates.length, 1);
   assert.equal(events.logs.some((message) => message.includes('do-not-leak')), false);
 });
+
+test('step 7 marks a deleted or deactivated imported account used with an invalid note', async () => {
+  const marked = [];
+  const { executor, events } = makeExecutor({
+    resolveImportedAccountCredentials: () => ({ email: 'invalid@example.com', password: 'do-not-leak' }),
+    sendToContentScriptResilient: async () => {
+      throw new Error('IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。');
+    },
+    markCurrentOpenAIAccountUsed: async (state, options) => marked.push({ state, options }),
+    STEP6_MAX_ATTEMPTS: 3,
+  });
+
+  await assert.rejects(
+    () => executor.executeStep7({ openaiAccountSource: 'imported-pool', currentOpenAIAccountId: 'invalid' }),
+    /IMPORTED_ACCOUNT_INVALID/
+  );
+  assert.equal(events.refreshStates.length, 1);
+  assert.equal(marked.length, 1);
+  assert.equal(marked[0].state.currentOpenAIAccountId, 'invalid');
+  assert.equal(marked[0].options.note, '已失效');
+  assert.equal(events.logs.some((message) => message.includes('do-not-leak')), false);
+});

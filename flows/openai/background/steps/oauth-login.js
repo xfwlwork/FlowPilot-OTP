@@ -9,6 +9,7 @@
       getLoginAuthStateLabel,
       getOAuthFlowStepTimeoutMs,
       getState,
+      markCurrentOpenAIAccountUsed,
       pickOpenAIAccountForRun,
       resolveImportedAccountCredentials,
       setState,
@@ -46,7 +47,7 @@
 
     function isTerminalImportedAccountError(error) {
       const message = String(typeof error === 'string' ? error : error?.message || '');
-      return /账号池.*(?:不存在|不可用|未选择|当前不可用)|accountId.*(?:not found|unavailable)|incorrect password|wrong password|invalid credentials|密码错误|密码不正确/i.test(message);
+      return /IMPORTED_ACCOUNT_INVALID::|账号池.*(?:不存在|不可用|未选择|当前不可用)|accountId.*(?:not found|unavailable)|incorrect password|wrong password|invalid credentials|密码错误|密码不正确/i.test(message);
     }
 
     function redactStep7ErrorMessage(error, secret = '') {
@@ -516,6 +517,28 @@
               'error',
               { step: completionStep, stepKey: 'oauth-login' }
             );
+            throw err;
+          }
+          if (usesImportedAccountPool && /IMPORTED_ACCOUNT_INVALID::/i.test(String(err?.message || err || ''))) {
+            const invalidAccountState = {
+              ...(initialState || {}),
+              currentOpenAIAccountId: selectedImportedAccountId || initialState?.currentOpenAIAccountId,
+            };
+            try {
+              await markCurrentOpenAIAccountUsed?.(invalidAccountState, {
+                note: '已失效',
+                logPrefix: `步骤 ${completionStep}：检测到导入账号已失效，`,
+              });
+              await addLog('检测到导入账号已被删除或停用，已标记为已用并备注“已失效”。', 'warn', {
+                step: completionStep,
+                stepKey: 'oauth-login',
+              });
+            } catch (markError) {
+              await addLog(`检测到导入账号已失效，但标记账号池失败：${getErrorMessage(markError)}`, 'warn', {
+                step: completionStep,
+                stepKey: 'oauth-login',
+              });
+            }
             throw err;
           }
           if (usesImportedAccountPool && isTerminalImportedAccountError(err)) {

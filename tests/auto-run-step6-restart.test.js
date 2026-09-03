@@ -149,6 +149,7 @@ const bundle = [
   extractFunction('isAddPhoneAuthFailure'),
   extractFunction('isAddPhoneAuthUrl'),
   extractFunction('isAddPhoneAuthState'),
+  extractFunction('isImportedAccountInvalidError'),
   extractFunction('isPlusCheckoutNonFreeTrialFailure'),
   extractFunction('isPlusCheckoutRestartStep'),
   extractFunction('isPlusCheckoutRestartRequiredFailure'),
@@ -677,6 +678,22 @@ test('auto-run stop errors after step 7 are rethrown immediately instead of rest
   assert.equal(result.events.invalidations.length, 0);
   assert.deepStrictEqual(result.events.steps, [7, 8, 9]);
   assert.ok(!result.events.logs.some(({ message }) => /回到步骤 7 重新开始授权流程/.test(message)));
+});
+
+test('auto-run rethrows a deactivated imported-account error instead of restarting oauth-login', async () => {
+  const harness = createHarness({
+    failureStep: 7,
+    failureBudget: 1,
+    failureMessage: 'IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: https://auth.openai.com/log-in/password',
+    authState: { state: 'imported_account_invalid_page', url: 'https://auth.openai.com/log-in/password' },
+  });
+
+  const result = await harness.runAndCaptureError();
+
+  assert.equal(result?.error?.message, 'IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: https://auth.openai.com/log-in/password');
+  assert.equal(result.events.invalidations.length, 0);
+  assert.deepStrictEqual(result.events.steps, [7]);
+  assert.ok(!result.events.logs.some(({ message }) => /回到节点 oauth-login 重新开始授权流程/.test(message)));
 });
 
 test('auto-run restarts from confirm-oauth step after transient step10 token_exchange_user_error', async () => {

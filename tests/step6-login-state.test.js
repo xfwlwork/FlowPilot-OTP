@@ -52,6 +52,8 @@ function extractFunction(name) {
 
 const bundle = [
   extractFunction('getPageTextSnapshot'),
+  extractFunction('isEmailVerificationPage'),
+  extractFunction('isImportedAccountInvalidPage'),
   extractFunction('getLoginVerificationDisplayedEmail'),
   extractFunction('getPhoneVerificationDisplayedPhone'),
   extractFunction('getContactVerificationServerErrorText'),
@@ -199,6 +201,18 @@ return {
 
   const snapshot = api.inspectLoginAuthState();
   assert.strictEqual(snapshot.state, 'verification_page');
+}
+
+{
+  const api = createApi({
+    pathname: '/log-in/password',
+    href: 'https://auth.openai.com/log-in/password',
+    passwordInput: { id: 'password' },
+    pageText: '身份验证错误 你没有账户，因为该账户已被删除或停用。错误代码：account_deactivated',
+  });
+
+  const snapshot = api.inspectLoginAuthState();
+  assert.strictEqual(snapshot.state, 'imported_account_invalid_page');
 }
 
 {

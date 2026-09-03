@@ -26,6 +26,7 @@
       hasSavedNodeProgress,
       isAddPhoneAuthFailure,
       isDuckDdgDailyLimitFailure,
+      isImportedAccountInvalidError,
       isKiroProxyFailure,
       isAutoRunTimerParkedError,
       isPhoneSmsPlatformRateLimitFailure,
@@ -850,6 +851,8 @@
               && isKiroProxyFailure(err);
             const blockedByDuckDdgDailyLimit = typeof isDuckDdgDailyLimitFailure === 'function'
               && isDuckDdgDailyLimitFailure(err);
+            const blockedByImportedAccountInvalid = typeof isImportedAccountInvalidError === 'function'
+              && isImportedAccountInvalidError(err);
             const canRetry = !blockedByAddPhone
               && !blockedByPhoneNoSupply
               && !blockedByPlusNonFreeTrial
@@ -857,6 +860,7 @@
               && !blockedByStep4Route405
               && !blockedByKiroProxy
               && !blockedByDuckDdgDailyLimit
+              && !blockedByImportedAccountInvalid
               && autoRunSkipFailures
               && attemptRun < maxAttemptsForRound;
 
@@ -893,6 +897,26 @@
                 targetRun < totalRuns
                   ? `第 ${targetRun}/${totalRuns} 轮因 add-phone/手机号页提前结束，自动流程将继续下一轮。`
                   : `第 ${targetRun}/${totalRuns} 轮因 add-phone/手机号页提前结束，已无后续轮次，本次自动运行结束。`,
+                'warn'
+              );
+              forceFreshTabsNextRun = true;
+              break;
+            }
+
+            if (blockedByImportedAccountInvalid) {
+              roundSummary.status = 'failed';
+              roundSummary.finalFailureReason = reason;
+              await setState({
+                autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
+              });
+              await appendRoundRecord('failed', reason, err);
+              cancelPendingCommands('当前导入 OpenAI 账号已失效，已跳过。');
+              await broadcastStopToContentScripts();
+              await addLog(`第 ${targetRun}/${totalRuns} 轮导入 OpenAI 账号已失效，已跳过该账号并跳过本轮剩余重试。`, 'warn');
+              await addLog(
+                targetRun < totalRuns
+                  ? `第 ${targetRun}/${totalRuns} 轮将使用下一个可用导入账号继续下一轮。`
+                  : `第 ${targetRun}/${totalRuns} 轮已无后续轮次可切换，本次自动运行结束。`,
                 'warn'
               );
               forceFreshTabsNextRun = true;

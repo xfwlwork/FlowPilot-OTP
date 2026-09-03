@@ -52,11 +52,50 @@ function extractFunction(name) {
 }
 
 const api = new Function(`
+${extractFunction('isEmailVerificationPage')}
+${extractFunction('isImportedAccountInvalidPage')}
 ${extractFunction('resolveCommandNodeId')}
 return {
+  isImportedAccountInvalidPage,
   resolveCommandNodeId,
 };
 `)();
+
+test('recognizes the OpenAI deleted or deactivated account page', () => {
+  const originalLocation = global.location;
+  const originalDocument = global.document;
+  const originalPageTextSnapshot = global.getPageTextSnapshot;
+  global.location = { pathname: '/email-verification' };
+  global.document = { body: { textContent: 'You do not have an account because it has been deleted or deactivated.' } };
+  global.getPageTextSnapshot = () => global.document.body.textContent;
+  try {
+    assert.equal(api.isImportedAccountInvalidPage(), true);
+  } finally {
+    global.location = originalLocation;
+    global.document = originalDocument;
+    global.getPageTextSnapshot = originalPageTextSnapshot;
+  }
+});
+
+test('recognizes the OpenAI deleted or deactivated account password page', () => {
+  const originalLocation = global.location;
+  const originalDocument = global.document;
+  const originalPageTextSnapshot = global.getPageTextSnapshot;
+  global.location = { pathname: '/log-in/password' };
+  global.document = {
+    body: {
+      textContent: '身份验证错误 你没有账户，因为该账户已被删除或停用。错误代码：account_deactivated',
+    },
+  };
+  global.getPageTextSnapshot = () => global.document.body.textContent;
+  try {
+    assert.equal(api.isImportedAccountInvalidPage(), true);
+  } finally {
+    global.location = originalLocation;
+    global.document = originalDocument;
+    global.getPageTextSnapshot = originalPageTextSnapshot;
+  }
+});
 
 test('signup page resolves bound-email relogin verification nodes from dynamic visible steps', () => {
   assert.equal(

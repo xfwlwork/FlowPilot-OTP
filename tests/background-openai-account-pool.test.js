@@ -96,3 +96,16 @@ test('marks the current imported account used without logging its password', asy
   assert.equal(api.broadcasts[0].openaiAccountPoolEntries[0].lastUsedAt > 0, true);
   assert.equal(Object.prototype.hasOwnProperty.call(api.broadcasts[0].openaiAccountPoolEntries[0], 'password'), false);
 });
+
+test('marks a detected invalid imported account used and records the invalid note', async () => {
+  const api = makeApi();
+  const result = await api.markCurrentOpenAIAccountUsed({
+    currentOpenAIAccountId: 'invalid',
+    openaiAccountPoolEntries: [{ id: 'invalid', email: 'invalid@example.com', password: 'do-not-log' }],
+  }, { note: '已失效' });
+
+  assert.equal(result.updated, true);
+  assert.equal(api.persisted[0].openaiAccountPoolEntries[0].used, true);
+  assert.equal(api.persisted[0].openaiAccountPoolEntries[0].note, '已失效');
+  assert.equal(api.broadcasts[0].openaiAccountPoolEntries[0].note, '已失效');
+});

@@ -347,6 +347,15 @@ function isEmailVerificationPage() {
   return /\/email-verification(?:[/?#]|$)/i.test(location.pathname || '');
 }
 
+function isImportedAccountInvalidPage() {
+  const path = String(location?.pathname || '');
+  if (!/(?:\/email-verification|\/log-in\/password)(?:[/?#]|$)/i.test(path)) return false;
+  const text = String((typeof getPageTextSnapshot === 'function' ? getPageTextSnapshot() : '') || document?.body?.textContent || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /(?:you do not have an account because it has been deleted or deactivated|你没有账户，因为该账户已被删除或停用)/i.test(text);
+}
+
 function getContactVerificationServerErrorText() {
   const path = String(location?.pathname || '');
   if (!/\/contact-verification(?:[/?#]|$)/i.test(path)) {
@@ -4515,6 +4524,7 @@ function inspectLoginAuthState() {
   const consentReady = isStep8Ready();
   const oauthConsentPage = isOAuthConsentPage();
   const chooseAccountPage = isChooseAccountPage();
+  const importedAccountInvalidPage = isImportedAccountInvalidPage();
   const baseState = {
     state: 'unknown',
     url: location.href,
@@ -4542,7 +4552,15 @@ function inspectLoginAuthState() {
     oauthConsentPage,
     consentReady,
     chooseAccountPage,
+    importedAccountInvalidPage,
   };
+
+  if (importedAccountInvalidPage) {
+    return {
+      ...baseState,
+      state: 'imported_account_invalid_page',
+    };
+  }
 
   if (retryState) {
     return {
@@ -5023,6 +5041,8 @@ function throwForStep6FatalState(snapshot, visibleStep = 7) {
       return;
     case 'add_phone_page':
       throw new Error(`当前页面已进入手机号页面，未经过登录验证码页，无法完成步骤 ${visibleStep}。URL: ${snapshot.url}`);
+    case 'imported_account_invalid_page':
+      throw new Error(`IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: ${snapshot?.url || location.href}`);
     case 'unknown':
       throw new Error(`无法识别当前登录页面状态。URL: ${snapshot?.url || location.href}`);
     default:
@@ -5775,6 +5795,10 @@ async function resolveStep6PostSubmitSnapshot(snapshot, options = {}) {
     final = false,
     addPhoneMessage,
   } = options;
+
+  if (normalizedSnapshot.state === 'imported_account_invalid_page') {
+    throw new Error(`IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: ${normalizedSnapshot.url || location.href}`);
+  }
 
   if (normalizedSnapshot.state === 'verification_page' || (allowPhoneVerificationPage && normalizedSnapshot.state === 'phone_verification_page')) {
     return {
