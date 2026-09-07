@@ -351,6 +351,8 @@ test('auto-run controller skips a deactivated imported account and starts the ne
 
   assert.equal(events.runCalls, 2);
   assert.equal(events.accountRecords.length, 1);
+  assert.equal(events.accountRecords[0].status, 'skipped');
+  assert.equal(events.accountRecords[0].reason, '导入 OpenAI 账号已失效，已跳过。');
   assert.equal(events.broadcasts.some(({ phase }) => phase === 'retrying'), false);
   assert.ok(events.logs.some(({ message }) => /已跳过该账号/.test(message)));
   assert.ok(events.logs.some(({ message }) => /下一个可用导入账号/.test(message)));

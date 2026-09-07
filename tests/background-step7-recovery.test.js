@@ -1970,6 +1970,47 @@ test('step 8 resolves the selected imported account OTP secret and submits its c
   assert.deepEqual(calls.completions, [{ otpVerification: true, phoneVerificationRequired: false }]);
 });
 
+test('step 8 marks the imported OTP account invalid when MFA submission detects account deactivation', async () => {
+  const calls = { marked: [], logs: [] };
+  globalScope.MultiPageOpenAIAccountPoolUtils = {
+    generateTotpCode: async () => '654321',
+  };
+  const executor = api.createStep8Executor({
+    addLog: async (message, level) => calls.logs.push({ message, level }),
+    chrome: { tabs: { update: async () => {} } },
+    ensureStep8VerificationPageReady: async () => ({ state: 'verification_page' }),
+    getImportedAccountOtpSecret: () => 'JBSWY3DPEHPK3PXP',
+    getOAuthFlowStepTimeoutMs: async (timeout) => timeout,
+    getTabId: async () => 1,
+    isVerificationMailPollingError: () => false,
+    markCurrentOpenAIAccountUsed: async (state, options) => calls.marked.push({ state, options }),
+    submitVerificationCode: async () => {
+      throw new Error('IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: https://auth.openai.com/mfa-challenge/test');
+    },
+    setState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  try {
+    await assert.rejects(
+      () => executor.executeStep8({
+        nodeId: 'fetch-login-code',
+        oauthUrl: 'https://oauth.example/latest',
+        openaiAccountSource: 'imported-pool',
+        currentOpenAIAccountId: 'otp-account',
+      }),
+      /IMPORTED_ACCOUNT_INVALID/
+    );
+  } finally {
+    delete globalScope.MultiPageOpenAIAccountPoolUtils;
+  }
+
+  assert.equal(calls.marked.length, 1);
+  assert.equal(calls.marked[0].state.currentOpenAIAccountId, 'otp-account');
+  assert.equal(calls.marked[0].options.note, '已失效');
+  assert.equal(calls.logs.some(({ level }) => level === 'error'), false);
+});
+
 test('step 8 checks iCloud session before polling iCloud mailbox', async () => {
   let icloudChecks = 0;
   let resolved = false;

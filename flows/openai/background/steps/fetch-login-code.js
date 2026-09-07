@@ -24,6 +24,7 @@
       isTabAlive,
       isVerificationMailPollingError,
       LUCKMAIL_PROVIDER,
+      markCurrentOpenAIAccountUsed,
       resolveSignupEmailForFlow,
       resolveVerificationStep,
       rerunStep7ForStep8Recovery,
@@ -94,6 +95,14 @@
           || String(state?.signupPhoneCompletedActivation?.phoneNumber || '').trim()
           || String(state?.signupPhoneActivation?.phoneNumber || '').trim()
         );
+    }
+
+    function isImportedAccountInvalidError(error) {
+      return /^IMPORTED_ACCOUNT_INVALID::/i.test(String(error?.message || error || ''));
+    }
+
+    function usesImportedAccountPool(state = {}) {
+      return String(state?.openaiAccountSource || '').trim().toLowerCase() === 'imported-pool';
     }
 
     function getAuthLoginStepForVisibleStep(visibleStep) {
@@ -906,6 +915,16 @@
           const authLoginStep = getAuthLoginStepForState(currentState, visibleStep);
           let currentError = err;
           let retryWithoutStep7 = false;
+
+          if (usesImportedAccountPool(currentState) && isImportedAccountInvalidError(err)) {
+            try {
+              await markCurrentOpenAIAccountUsed?.(currentState, { note: '已失效' });
+              await addLog(`步骤 ${visibleStep}：导入 OpenAI 账号已失效，已标记为已用并跳过。`, 'warn');
+            } catch (_) {
+              await addLog(`步骤 ${visibleStep}：导入 OpenAI 账号已失效，但账号池标记未完成。`, 'warn');
+            }
+            throw err;
+          }
 
           const isMailPollingError = isVerificationMailPollingError(err);
           if (isMailPollingError && !isStep8RestartStep7Error(err)) {

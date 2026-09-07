@@ -217,6 +217,18 @@ return {
 
 {
   const api = createApi({
+    pathname: '/mfa-challenge/6a92db61ebe08191ae18eaab4e168574',
+    href: 'https://auth.openai.com/mfa-challenge/6a92db61ebe08191ae18eaab4e168574',
+    verificationTarget: { id: 'otp' },
+    pageText: '身份验证错误 你没有账户，因为该账户已被删除或停用。错误代码：account_deactivated',
+  });
+
+  const snapshot = api.inspectLoginAuthState();
+  assert.strictEqual(snapshot.state, 'imported_account_invalid_page');
+}
+
+{
+  const api = createApi({
     pathname: '/phone-verification',
     href: 'https://auth.openai.com/phone-verification',
     verificationTarget: { id: 'otp' },

@@ -13973,6 +13973,7 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
   isTabAlive,
   isVerificationMailPollingError,
   LUCKMAIL_PROVIDER,
+  markCurrentOpenAIAccountUsed,
   resolveVerificationStep: verificationFlowHelpers.resolveVerificationStep,
   resolveSignupEmailForFlow,
   persistRegistrationEmailState,

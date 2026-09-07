@@ -349,7 +349,7 @@ function isEmailVerificationPage() {
 
 function isImportedAccountInvalidPage() {
   const path = String(location?.pathname || '');
-  if (!/(?:\/email-verification|\/log-in\/password)(?:[/?#]|$)/i.test(path)) return false;
+  if (!/(?:\/email-verification|\/log-in\/password|\/mfa-challenge)(?:[/?#]|$)/i.test(path)) return false;
   const text = String((typeof getPageTextSnapshot === 'function' ? getPageTextSnapshot() : '') || document?.body?.textContent || '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -4742,6 +4742,9 @@ async function waitForLoginVerificationPageReady(timeout = 10000, visibleStep = 
     if (snapshot.state === 'verification_page' || (allowPhoneVerificationPage && snapshot.state === 'phone_verification_page')) {
       return snapshot;
     }
+    if (snapshot.state === 'imported_account_invalid_page') {
+      throw new Error(`IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: ${snapshot?.url || location.href}`);
+    }
     if (snapshot.state !== 'unknown') {
       break;
     }
@@ -5374,6 +5377,10 @@ async function waitForVerificationSubmitOutcome(step, timeout, options = {}) {
 
   while (Date.now() - start < resolvedTimeout) {
     throwIfStopped();
+
+    if (step === 8 && isImportedAccountInvalidPage()) {
+      throw new Error(`IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: ${location.href}`);
+    }
 
     const retryFlow = step === 4 ? 'signup' : 'login';
     const retryState = getCurrentAuthRetryPageState(retryFlow);

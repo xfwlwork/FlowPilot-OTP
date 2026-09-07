@@ -904,12 +904,12 @@
             }
 
             if (blockedByImportedAccountInvalid) {
-              roundSummary.status = 'failed';
-              roundSummary.finalFailureReason = reason;
+              roundSummary.status = 'skipped';
+              roundSummary.finalFailureReason = '导入 OpenAI 账号已失效，已跳过。';
               await setState({
                 autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               });
-              await appendRoundRecord('failed', reason, err);
+              await appendRoundRecord('skipped', roundSummary.finalFailureReason, null);
               cancelPendingCommands('当前导入 OpenAI 账号已失效，已跳过。');
               await broadcastStopToContentScripts();
               await addLog(`第 ${targetRun}/${totalRuns} 轮导入 OpenAI 账号已失效，已跳过该账号并跳过本轮剩余重试。`, 'warn');

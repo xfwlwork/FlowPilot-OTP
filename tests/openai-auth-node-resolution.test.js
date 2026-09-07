@@ -97,6 +97,26 @@ test('recognizes the OpenAI deleted or deactivated account password page', () =>
   }
 });
 
+test('recognizes the OpenAI deleted or deactivated account MFA challenge page', () => {
+  const originalLocation = global.location;
+  const originalDocument = global.document;
+  const originalPageTextSnapshot = global.getPageTextSnapshot;
+  global.location = { pathname: '/mfa-challenge/6a92db61ebe08191ae18eaab4e168574' };
+  global.document = {
+    body: {
+      textContent: '身份验证错误 你没有账户，因为该账户已被删除或停用。错误代码：account_deactivated',
+    },
+  };
+  global.getPageTextSnapshot = () => global.document.body.textContent;
+  try {
+    assert.equal(api.isImportedAccountInvalidPage(), true);
+  } finally {
+    global.location = originalLocation;
+    global.document = originalDocument;
+    global.getPageTextSnapshot = originalPageTextSnapshot;
+  }
+});
+
 test('signup page resolves bound-email relogin verification nodes from dynamic visible steps', () => {
   assert.equal(
     api.resolveCommandNodeId({

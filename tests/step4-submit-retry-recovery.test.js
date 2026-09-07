@@ -105,6 +105,36 @@ return {
   assert.equal(api.snapshot().recoverCalls, 1);
 });
 
+test('waitForVerificationSubmitOutcome immediately throws when an OTP MFA page shows a deactivated imported account', async () => {
+  const api = new Function(`
+const location = { href: 'https://auth.openai.com/mfa-challenge/6a92db61ebe08191ae18eaab4e168574' };
+
+function throwIfStopped() {}
+function getCurrentAuthRetryPageState() { return null; }
+function isImportedAccountInvalidPage() { return true; }
+function getVerificationErrorText() { return ''; }
+function isStep8Ready() { return false; }
+function isAddPhonePageReady() { return false; }
+function isVerificationPageStillVisible() { return false; }
+async function sleep() {
+  throw new Error('should not wait when the MFA page reports account_deactivated');
+}
+
+${extractFunction('waitForVerificationSubmitOutcome')}
+
+return {
+  run() {
+    return waitForVerificationSubmitOutcome(8, 30000, { purpose: 'login' });
+  },
+};
+`)();
+
+  await assert.rejects(
+    () => api.run(),
+    /IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: https:\/\/auth\.openai\.com\/mfa-challenge\//
+  );
+});
+
 test('waitForVerificationSubmitOutcome does not assume success after repeated signup retry pages', async () => {
   const api = new Function(`
 let recoverCalls = 0;

@@ -320,6 +320,43 @@ return {
   assert.equal(result.message, '登录验证码页面准备就绪前进入登录超时报错页。');
 });
 
+test('waitForLoginVerificationPageReady throws imported-account invalid error on MFA challenge', async () => {
+  const api = new Function(`
+const location = {
+  href: 'https://auth.openai.com/mfa-challenge/6a92db61ebe08191ae18eaab4e168574',
+};
+
+function inspectLoginAuthState() {
+  return {
+    state: 'imported_account_invalid_page',
+    url: location.href,
+  };
+}
+
+function throwIfStopped() {}
+async function sleep() {
+  throw new Error('should not wait once a deactivated account is detected');
+}
+
+function getLoginAuthStateLabel(snapshot) {
+  return snapshot?.state || '未知页面';
+}
+
+${extractFunction('waitForLoginVerificationPageReady')}
+
+return {
+  run() {
+    return waitForLoginVerificationPageReady(10);
+  },
+};
+`)();
+
+  await assert.rejects(
+    () => api.run(),
+    /IMPORTED_ACCOUNT_INVALID::导入账号已被删除或停用。URL: https:\/\/auth\.openai\.com\/mfa-challenge\//
+  );
+});
+
 test('waitForLoginVerificationPageReady reports login timeout page without step8 restart prefix', async () => {
   const api = new Function(`
 const location = {
